@@ -1,0 +1,5 @@
+kdb.db
+compile_commands.json
+*.o
+gitkeeper
+.cache/
