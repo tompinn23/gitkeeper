@@ -5,7 +5,7 @@
 CFLAGS := -ggdb3 -I/usr/local/include
 LDFLAGS := -L/usr/local/lib -lsqlite3
 
-objs := gitkeeper.o
+objs := gitkeeper.o log.o sha.o admin.o key.o
 
 gitkeeper: $(objs) schema.sql
 	cc $(LDFLAGS) $(objs) -o $@
