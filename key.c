@@ -39,52 +39,6 @@ size_t base64_decode(const char *in, uint8_t *out, size_t max_out) {
     return j;
 }
 
-// Encode to standard base64
-void base64_encode(const uint8_t *in, size_t len, char *out) {
-    static const char tbl[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    size_t i, j;
-    for (i = 0, j = 0; i + 2 < len; i += 3) {
-        out[j++] = tbl[in[i] >> 2];
-        out[j++] = tbl[((in[i] & 3) << 4) | (in[i+1] >> 4)];
-        out[j++] = tbl[((in[i+1] & 15) << 2) | (in[i+2] >> 6)];
-        out[j++] = tbl[in[i+2] & 63];
-    }
-    if (i < len) {
-        out[j++] = tbl[in[i] >> 2];
-        if (i + 1 < len) {
-            out[j++] = tbl[((in[i] & 3) << 4) | (in[i+1] >> 4)];
-            out[j++] = tbl[(in[i+1] & 15) << 2];
-        } else {
-            out[j++] = tbl[(in[i] & 3) << 4];
-            out[j++] = '=';
-        }
-        out[j++] = '=';
-    }
-    out[j] = '\0';
-}
-
-size_t b64_decoded_size(const char *in) {
-	size_t len;
-	size_t ret;
-	size_t i;
-
-	if (in == NULL)
-		return 0;
-
-	len = strlen(in);
-	ret = len / 4 * 3;
-
-	for (i=len; i-->0; ) {
-		if (in[i] == '=') {
-			ret--;
-		} else {
-			break;
-		}
-	}
-
-	return ret;
-}
-
 static int strdelimcpy(char *dest, const char *src, char delim, int max) {
     int i = 0;
     while(i < max - 1 && src[i] && src[i] != delim) {
@@ -98,18 +52,6 @@ static int strdelimcpy(char *dest, const char *src, char delim, int max) {
     return i;
 }
 
-
-static inline char ct_tolower(char c) {
-    // Branchless: if c is in 'A'..'Z', set bit 0x20 to convert to lowercase
-    uint8_t is_upper = (uint8_t)((c - 'A') <= ('Z' - 'A'));
-    return c | (is_upper * 0x20);
-}
-
-void str_lower(char *s, size_t len) {
-    for (size_t i = 0; i < len; ++i) {
-        s[i] = ct_tolower(s[i]);
-    }
-}
 
 bool mem_equals(const void *s1, size_t l1, const void *s2, size_t l2) {
     const uint8_t *p1 = (const uint8_t *)s1;
@@ -195,13 +137,14 @@ int verify_kdb(char *finger, char *kdb) {
             continue;
         }
         if(mem_equals(incoming, incomingsz, entry->bytes, entry->bytesz)) {
-            printf("command=\"gitkeeper shell -u \'%s\'\" %s", user, key);
+            printf("command=\"gitkeeper -k %s shell \'%s\'\",no-port-forwarding,no-X11-forwarding,no-agent-forwarding %s\n", kdb, user, key);
             break;
         }
     }
 
-    sqlite3_finalize(stmt);
+    rc = 0;
 out:
+    sqlite3_finalize(stmt);
     sqlite3_close(db);
     return rc;
 }

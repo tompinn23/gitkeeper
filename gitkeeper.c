@@ -7,7 +7,11 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <errno.h>
+#include <limits.h>
+
 #include <sqlite3.h>
+
 
 #include "log.h"
 #include "sha.h"
@@ -44,32 +48,18 @@ void do_checkdb(char *db, int argc, char **argv) {
 }
 
 void do_addgroup(char *dbfile, int argc, char **argv) {
-    static struct option longopts[] = {
-        {"help", no_argument, NULL, 'h'},
-        {NULL, 0, NULL, 0},
-    };
     sqlite3 *db = NULL;
 
     int ch, rc;
-
-    reset_getopt();
-    while((ch = getopt_long(argc, argv, "h", longopts, NULL)) != -1) {
-        switch (ch) {
-        case 'h':
-            break;
-        case '?':
-            exit(EXIT_FAILURE);
-        }
-    }
 
     if(open_sqlite_rw(dbfile, &db) < 0) {
         exit(EXIT_FAILURE);
     }
 
-    if((argc - optind) >= 2) {
-        rc = add_groups(db, argv[optind], argv + optind + 1, (argc - optind - 1));
-    } else if((argc - optind) == 1) {
-        rc = add_groups(db, argv[optind], NULL, 0);
+    if(argc >= 2) {
+        rc = add_groups(db, argv[0], argv + 1, argc - 1);
+    } else if(argc == 1) {
+        rc = add_groups(db, argv[0], NULL, 0);
     } else {
         fprintf(stderr, "addgroup requires either group [user...]\n");
         rc = 0;
@@ -87,24 +77,10 @@ void do_addgroup(char *dbfile, int argc, char **argv) {
 }
 
 int do_adduser(char *dbfile, int argc, char **argv) {
-    static struct option longopts[] = {
-        {"help", no_argument, NULL, 'h'},
-        {NULL, 0, NULL, 0},
-    };
     sqlite3 *db = NULL;
     int ch, rc;
 
-    reset_getopt();
-    while((ch = getopt_long(argc, argv, "h", longopts, NULL)) != -1) {
-        switch (ch) {
-        case 'h':
-            break;
-        case '?':
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    if(optind >= argc) {
+    if(argc < 1) {
         un_log(LOG_INFO, "adduser requires [user]");
         exit(EXIT_FAILURE);
     }
@@ -113,12 +89,76 @@ int do_adduser(char *dbfile, int argc, char **argv) {
         return -1;
     }
 
-    ch = add_user(db, argv[optind]);
+    ch = add_user(db, argv[0]);
     if((rc = sqlite3_close(db)) != SQLITE_OK) {
         fprintf(stderr, "failed to close db: '%s'\n", sqlite3_errstr(rc));
         exit(EXIT_FAILURE);
     }
     exit(ch);
+}
+
+
+int command_repo_range(const char *cmd, const char **start, size_t *len) {
+    char quote = '\0';
+    const char *repo, *end;
+
+    if(!cmd || !start) return -1;
+
+    const char *space = strchr(cmd, ' ');
+    if(!space) return -1;
+
+    const char *repo = space + 1;
+    if(*repo == '\'' || *repo == '\"') {
+        quote = *repo; /* save the quote */
+        repo++;
+    }
+
+    const char *end = repo + strlen(repo);
+    if(quote) {
+        const char *q = end - 1;
+        while(q > repo && *q != quote) q--;
+        if(*q == quote) {
+            end = q;
+        } else {
+            return -1;
+        }
+    }
+
+    *start = repo;
+    if(len) *len = (size_t)(end - repo);
+    return 0;
+}
+
+#define PERM_R (1<<2)
+#define PERM_W (1<<1)
+#define PERM_X (1<<0) /* idk what this might even do. */
+
+void do_shell(char *dbfile, char *uidstr) {
+    char *endptr;
+    long uid;
+    char *cmd;
+    const char *repo;
+    size_t rlen;
+    un_log(LOG_DEBUG, "original: %s uid: %s", getenv("SSH_ORIGINAL_COMMAND"), uidstr);
+
+    uid = strtol(uidstr, &endptr, 10);
+    if(errno == ERANGE && (val == LONG_MAX || val == LONG_MIN)) {
+        exit(10);
+    }
+    if((errno != 0 && val == 0) ||
+        endptr == input ||
+        *endptr != '\0') {
+        exit(10);
+    }
+
+    cmd = getenv("SSH_ORIGINAL_COMMAND");
+    if(command_repo_range(cmd, &repo, &rlen) < 0) {
+        //log(LOG_ERR, "parsing commandline failed")
+        exit(12);
+    }    
+ 
+
+    exit(0);
 }
 
 static void usage() {
@@ -181,5 +221,7 @@ int main(int argc, char **argv) {
         do_addgroup(db, argc - optind, argv + optind);
     } else if(!strcmp(subcommand, "checkkdb")) {
         do_checkdb(db, argc - optind, argv + optind);
+    } else if(!strcmp(subcommand, "shell")) {
+        do_shell(db, argv[optind]);
     }
 }
