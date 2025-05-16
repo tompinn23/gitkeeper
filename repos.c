@@ -1,5 +1,10 @@
 #include "repos.h"
 
+#include "log.h"
+#include <stdlib.h>
+#include <errno.h>
+#include <limits.h>
+
 int open_sqlite_ro(char *dbfile, sqlite3 **db) {
     int rc;
     char *errmsg;
@@ -22,7 +27,7 @@ int repos_check_permission(sqlite3 *db, const char *repo, int repolen, long uid)
         "    WHEN R.UID = ? THEN R.UPERM "
         "    WHEN EXISTS ( "
         "        SELECT 1 "
-        "        FROM GROUP_MEMBERSHIP GM "
+        "        FROM MEMBER_GROUPS GM "
         "        WHERE GM.UID = ? AND GM.GID = R.GID "
         "    ) THEN R.GPERM "
         "    ELSE NULL "
@@ -78,3 +83,57 @@ out:
     sqlite3_finalize(stmt);
     return rc;
 }
+
+int parse_command(const char *cmd, const char **ocmd, const char **orepo) {
+    char quote = '\0';
+    const char *end;
+    char *tmp;
+    if(!cmd || !ocmd || !orepo) {
+        return -1;
+    }
+
+    const char *space = strchr(cmd, ' ');
+    if(!space) {
+        return -1;
+    }
+    tmp = malloc((int)(space - cmd) + 1);
+    if(!tmp) {
+        return -1;
+    }
+    memcpy(tmp, cmd, (int)(space - cmd));
+    tmp[(int)(space - cmd)] = '\0';
+
+    *ocmd = tmp;
+
+    const char *repo = space + 1;
+    if(*repo == '\'' || *repo == '\"') {
+        quote = *repo; /* save the quote */
+        repo++;
+    }
+
+    end = repo + strlen(repo);
+    if(quote) {
+        const char *q = end - 1;
+        while(q > repo && *q != quote) q--;
+        if(*q == quote) {
+            end = q;
+        } else {
+            free(*ocmd);
+            *ocmd = NULL;
+            return -1;
+        }
+    }
+
+    tmp = malloc((int)(end - repo) + 1);
+    if(!tmp) {
+        free(*ocmd);
+        *ocmd = NULL;
+        return -1;
+    }
+    memcpy(tmp, repo, (int)(end - repo));
+    tmp[(int)(end - repo)] = '\0';
+
+    *orepo = tmp;
+    return 0;
+}
+

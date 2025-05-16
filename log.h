@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include <stdbool.h>
 
+#include <stdio.h>
 
 enum un_log_mode {
     LOG_ERR,
@@ -31,4 +32,6 @@ bool un_log_enabled(enum un_log_mode mode);
 #define un_vlog(mode, fmt, args) _un_vlog("[%s:%d] " fmt, UN_FILENAME, __LINE__, args)
 #define un_log_errno(mode, fmt, ...) _un_log(mode, "[%s:%d] " fmt ": %s", UN_FILENAME, __LINE__, ##__VA_ARGS__, strerror(errno))
 #define un_log_err(mode, err, fmt, ...) _un_log(mode, "[%s:%d] " fmt ": %s", UN_FILENAME, __LINE__, ##__VA_ARGS__, strerror(err))
-#define un_log_sqlite(mode, fmt, ...) _un_log(mode, "[%s:%d] " fmt ": %s", UN_FILENAME, __LINE__, ##__VA_ARGS__, sqlite3_errstr(rc))
+#define un_log_sqlite(mode, fmt, ...) _un_log(mode, "[%s:%d] " fmt ": %s", UN_FILENAME, __LINE__, ##__VA_ARGS__, sqlite3_errmsg(db))
+
+#define die(fmt, ...) _un_log(LOG_ERR, "[%s:%d] " fmt, UN_FILENAME, __LINE__, ##__VA_ARGS__); exit(EXIT_FAILURE)

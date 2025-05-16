@@ -35,6 +35,30 @@ out:
     return rc;
 }
 
+static int check_exists(sqlite3 *db, const char *sql, char *param) {
+    sqlite3_stmt *stmt;
+    int rc;
+    int exists = 0;
+
+    if((rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL)) != SQLITE_OK) {
+        un_log(LOG_ERR, "failed to prepare stmt: %s", sqlite3_errmsg16(db));
+        return -1;
+    }
+    sqlite3_bind_text(stmt, 1, param, -1, SQLITE_STATIC);
+    if((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        exists = sqlite3_column_int(stmt, 0);
+    } else if(rc == SQLITE_DONE) {
+        exists = 0;
+    } else {
+        un_log(LOG_ERR, "failed to execute stmt: %s", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
+
+    sqlite3_finalize(stmt);
+    return exists;
+}
+
 int add_ugroup(sqlite3 *db, char *grp, char *user) {
     const char *usql = "INSERT INTO GROUP_MEMBERSHIP (UID, GID) SELECT USERS.UID, USERGROUPS.GID FROM USERS, USERGROUPS WHERE USERS.USERNAME = ? AND USERGROUPS.NAME = ?";
     const char *check_usersql = "SELECT 1 FROM USERS WHERE USERNAME = ?";
@@ -143,39 +167,93 @@ out:
     return rc;
 }
 
-int add_user(sqlite3 *db, char *user) {
+int check_key(sqlite3 *db, char *user, char *key) {
+    const char *sql = "SELECT USERS.UID, USERS.USERNAME, TARGET.UID FROM USER_KEYS" 
+                      "JOIN USERS ON USERS.UID = USER_KEYS.UID" 
+                      "JOIN USERS AS TARGET ON TARGET.USERNAME = ? WHERE USER_KEYS.KEY = ?";
+    
+    sqlite3_stmt *stmt;
+    int rc = 0;
+    if((rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL)))
+
+
+}
+
+int add_user(sqlite3 *db, char *user, char *key) {
     sqlite3_stmt *stmt = NULL;
     int rc;
 
     const char *sql = "INSERT INTO USERS (USERNAME) VALUES (?);";
+    const char *key_sql = "INSERT IN";
 
     if(sqlite3_db_readonly(db, NULL)) {
         return -1;
     }
 
-    rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
-    if(rc != SQLITE_OK) {
+    if(!check_exists(db, "SELECT EXISTS(SELECT UID FROM USERS WHERE USERNAME = ?)", user)) {
+        rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+        if(rc != SQLITE_OK) {
+            sqlite3_finalize(stmt);
+            un_log_sqlite(LOG_ERR, "error preparing stmt: %s\n", sql);
+            return -1;
+        }
+
+        rc = sqlite3_bind_text(stmt, 1, user, -1, SQLITE_STATIC);
+        if(rc != SQLITE_OK) {
+            sqlite3_finalize(stmt);
+            un_log_sqlite(LOG_ERR, "error binding stmt: %s\n", sql);
+            return -1;
+        }
+
+        rc = sqlite3_step(stmt);
+        if(rc == SQLITE_CONSTRAINT) {
+            un_log(LOG_ERR, "failed to add user (user already exists)");
+        } else if(rc != SQLITE_DONE) {
+            sqlite3_finalize(stmt);
+            un_log_sqlite(LOG_ERR, "error inserting user: %s\n", user);
+            return -1;
+        }
         sqlite3_finalize(stmt);
-        un_log_sqlite(LOG_ERR, "error preparing stmt: %s\n", sql);
-        return -1;
     }
 
-    rc = sqlite3_bind_text(stmt, 1, user, -1, SQLITE_STATIC);
-    if(rc != SQLITE_OK) {
-        sqlite3_finalize(stmt);
-        un_log_sqlite(LOG_ERR, "error binding stmt: %s\n", sql);
-        return -1;
+    if(key != NULL) {
+        rc =s 
     }
 
-    rc = sqlite3_step(stmt);
-    if(rc == SQLITE_CONSTRAINT) {
-        un_log(LOG_ERR, "failed to add user (user already exists)");
-    } else if(rc != SQLITE_DONE) {
-        sqlite3_finalize(stmt);
-        un_log_sqlite(LOG_ERR, "error inserting user: %s\n", user);
-        return -1;
-    }
-
-    sqlite3_finalize(stmt);
     return 0;
+}
+
+int add_repo(sqlite3 *db, char *repo, const char *username, const char *groupname, const char *uperms, const char *gperms) {
+    const char *sql = "INSERT INTO REPOS (REPO, UID, GID, UPERM, GPERM)"
+                      "VALUES (?, (SELECT UID FROM USERS WHERE USERNAME = ?), (SELECT GID FROM USERGROUPS WHERE NAME = ?), ?, ?)"
+                      "ON CONFLICT(REPO) DO UPDATE SET UID = excluded.UID, GID = excluded.GID, UPERM = excluded.UPERM, GPERM = excluded.GPERM";
+
+    sqlite3_stmt *stmt = NULL;
+    int rc;
+    if(sqlite3_db_readonly(db, NULL)) {
+        return -1;
+    }
+
+    if((rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL)) != SQLITE_OK) {
+        un_log_sqlite(LOG_ERR, "failed to prepare stmt");
+        rc = -1;
+        goto out;
+    }
+
+    sqlite3_bind_text(stmt, 1, repo, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, username, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, groupname, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, uperms, -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, gperms, -1, SQLITE_STATIC);
+
+    if((rc = sqlite3_step(stmt)) != SQLITE_DONE) {
+        un_log_sqlite(LOG_ERR, "failed inserting repo");
+        rc = -1;
+        goto out;
+    }
+
+    rc = 0;
+out:
+    sqlite3_finalize(stmt);
+    return rc;
 }

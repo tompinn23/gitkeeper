@@ -25,4 +25,4 @@ int open_sqlite_rw(char *file, sqlite3 **db);
 
 int add_ugroup(sqlite3 *db, char *grp, char *user);
 int add_groups(sqlite3 *db, char *group, char **users, int ulen);
-int add_user(sqlite3 *db, char *user);
+int add_user(sqlite3 *db, char *user, char *key);
