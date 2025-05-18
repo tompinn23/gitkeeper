@@ -1,5 +1,8 @@
 kdb.db
 compile_commands.json
 *.o
+*.d
 gitkeeper
 .cache/
+gk
+

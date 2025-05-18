@@ -81,7 +81,6 @@ void cmd_keys(char *dbfile, int argc, char **argv) {
     }
 
 
-        sqlite3_close(db);
     if(verify_key(db, argv[0], argv[1], &key, &uid) < 0) {
         sqlite3_close(db);
         exit(1);
