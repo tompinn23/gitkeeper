@@ -2,6 +2,8 @@
 
 #include <sqlite3.h>
 
+#include "db/ro.h"
+
 #define STR2(x) #x
 #define STR(x) STR2(x)
 
@@ -20,9 +22,8 @@
             extern __attribute__((aligned(16))) const char name[]; \
             extern const char name##_end[]
 
+int open_sqlite_rw(char *, sqlite3 **);
 
-int open_sqlite_rw(char *file, sqlite3 **db);
-
-int add_ugroup(sqlite3 *db, char *grp, char *user);
-int add_groups(sqlite3 *db, char *group, char **users, int ulen);
-int add_user(sqlite3 *db, char *user, char *key);
+int add_groups(sqlite3 *, char *, char **, int);
+int add_user(sqlite3 *, char *, char *);
+int add_repo(sqlite3 *db, const char *repo, const char *user, const char *uprm, const char *grp, const char *gprm);
